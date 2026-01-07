@@ -442,4 +442,35 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(ghost);
 
         const clone = document.getElementById('target-card').cloneNode(true);
-        clone.styl
+        clone.style.transform = 'none'; 
+        clone.style.width = '1080px';
+        clone.style.height = '1080px';
+        
+        ghost.appendChild(clone);
+
+        setTimeout(() => {
+            html2canvas(clone, {
+                scale: 1, 
+                useCORS: true,
+                backgroundColor: "#000"
+            }).then(canvas => {
+                const link = document.createElement('a');
+                const name = (els.title.value || "review").replace(/[^a-zа-я0-9]/gi,'_');
+                link.download = `CN_${name}_Card.png`;
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+
+                document.body.removeChild(ghost);
+                btn.innerText = oldText;
+            });
+        }, 200);
+    });
+
+    [els.title, els.comment, els.plot, els.chars, els.visual, els.sound, els.vibe]
+        .forEach(el => el.addEventListener('input', update));
+
+    update();
+});
+</script>
+</body>
+</html>
