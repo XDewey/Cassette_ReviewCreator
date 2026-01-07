@@ -1,19 +1,209 @@
-<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cassette Review Card Creator</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Cassette Review Card</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;900&display=swap" rel="stylesheet">
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #000;
+            --panel: #141414;
+            --text: #fff;
+            --accent: #2962FF;
+            --border: #333;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
+        .app-container { display: flex; height: 100%; }
+
+        /* --- ПАНЕЛЬ УПРАВЛЕНИЯ --- */
+        .controls {
+            width: 340px; background: var(--panel); padding: 20px;
+            border-right: 1px solid var(--border); overflow-y: auto;
+            flex-shrink: 0; z-index: 10;
+        }
+        h1 { font-size: 18px; color: var(--text); margin: 0 0 20px 0; }
+        .input-block { margin-bottom: 15px; }
+        .input-block label { display: block; font-size: 12px; color: #888; margin-bottom: 5px; }
+        input[type="text"], textarea { 
+            width: 100%; background: #000; border: 1px solid #444; color: #fff; 
+            padding: 8px; border-radius: 6px; resize: none; font-family: inherit; 
+        }
+        input[type="file"] { font-size: 12px; }
+        .divider { 
+            font-size: 10px; text-transform: uppercase; color: #666; font-weight: bold; 
+            border-bottom: 1px solid #333; margin: 20px 0 10px 0; padding-bottom: 5px;
+        }
+        .slider-row { display: flex; align-items: center; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+        .slider-row span { width: 70px; }
+        .slider-row .val { width: 30px; text-align: right; color: var(--accent); }
+
+        input[type="range"] { 
+            flex-grow: 1; margin: 0 10px; height: 6px; 
+            background: #333; border-radius: 3px; 
+            -webkit-appearance: none; cursor: pointer; box-shadow: none; 
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 18px; height: 18px; 
+            background: #fff; border-radius: 50%; box-shadow: none;
+        }
+        .rainbow-slider {
+            background: linear-gradient(90deg, #FF0000 0%, #FF7F00 16%, #FFFF00 33%, #00FF00 50%, #00FFFF 66%, #0000FF 83%, #8B00FF 100%) !important;
+        }
+        .vibe-desc { text-align: right; font-size: 11px; color: #888; margin-top: -5px; }
+
+        #btn-save {
+            width: 100%; background: var(--accent); color: #fff; border: none; padding: 15px;
+            border-radius: 8px; font-weight: bold; font-size: 16px; margin-top: 20px; cursor: pointer;
+        }
+
+        /* --- ПРЕВЬЮ ОБЛАСТЬ --- */
+        .preview-wrapper {
+            flex-grow: 1; background: #050505; 
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; position: relative;
+            background-image: radial-gradient(#222 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        #card-scale-root {
+            transform-origin: center center;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5); 
+        }
+
+        /* --- САМА КАРТОЧКА --- */
+        .card-hd {
+            width: 1080px; height: 1080px; 
+            background: #000;
+            position: relative; overflow: hidden; display: flex; flex-direction: column;
+        }
+
+        /* 1. ФОНОВЫЙ СЛОЙ (DIV вместо IMG) */
+        .bg-layer { 
+            position: absolute; inset: 0; z-index: 1;
+            background-color: #111;
+            /* ВАЖНО: cover обрезает лишнее, а не сжимает */
+            background-size: cover; 
+            background-position: center;
+            background-repeat: no-repeat;
+            
+            /* БЛЮР ПО УМОЛЧАНИЮ (Android/PC) */
+            filter: blur(40px);
+            transform: scale(1.1);
+        }
+
+        /* 2. ЕСЛИ iOS - ВЫКЛЮЧАЕМ БЛЮР (чтобы не было пикселей) */
+        body.is-ios .bg-layer {
+            filter: none !important;
+            transform: none !important;
+            opacity: 0.3; /* Просто затемняем */
+        }
+
+        .bg-overlay {
+            position: absolute; inset: 0; z-index: 2;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.85));
+        }
+        /* На iOS оверлей чуть темнее, т.к. фон четкий */
+        body.is-ios .bg-overlay {
+            background: linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0.95));
+        }
+
+        .card-inner { position: relative; z-index: 5; height: 100%; padding: 60px; display: flex; flex-direction: column; }
+
+        .top-part { display: flex; gap: 40px; height: 500px; }
+        .poster-box { 
+            width: 340px; height: 100%; border-radius: 20px; overflow: hidden; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8); 
+            border: 2px solid rgba(255,255,255,0.1); flex-shrink: 0;
+            background: #111;
+        }
+
+        /* ПОСТЕР (DIV вместо IMG) */
+        #card-poster-div {
+            width: 100%; height: 100%;
+            background-color: #222;
+            background-size: cover; 
+            background-position: center;
+            background-repeat: no-repeat;
+            background-image: url('https://via.placeholder.com/400x600/333/555?text=POSTER');
+        }
+
+        .info-box { flex-grow: 1; display: flex; flex-direction: column; }
+        .title-wrap { height: 180px; overflow: hidden; margin-bottom: 20px; }
+        .title-wrap h2 { 
+            margin: 0; font-size: 54px; line-height: 1.1; font-weight: 800; 
+            text-shadow: 0 4px 10px rgba(0,0,0,0.8);
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+        }
+
+        .stats-list { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+        .stat { display: flex; align-items: center; gap: 20px; }
+        .l { width: 110px; font-size: 26px; font-weight: 700; color: #ccc; text-shadow: 1px 1px 2px #000;}
+        .b { flex-grow: 1; height: 14px; background: rgba(0,0,0,0.6); border-radius: 7px; border: 1px solid rgba(255,255,255,0.15); }
+        .b div { height: 100%; background: #fff; border-radius: 7px; box-shadow: none; }
+        .v { width: 60px; text-align: right; font-size: 30px; font-weight: 800; text-shadow: 1px 1px 2px #000;}
+
+        .vibe-block {
+            margin-top: auto; background: rgba(0,0,0,0.6); padding: 15px 25px; 
+            border-radius: 15px; border: 1px solid rgba(255,255,255,0.2);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .vt { font-size: 22px; font-weight: 700; color: #ddd; }
+        .vv { font-size: 30px; font-weight: 900; }
+
+        .mid-part { flex-grow: 1; display: flex; align-items: center; justify-content: center; }
+        .mid-part p { 
+            font-size: 26px; font-style: italic; text-align: center; color: #fff; 
+            margin: 0; line-height: 1.4; max-height: 160px;
+            overflow: hidden; text-shadow: 0 2px 10px rgba(0,0,0,1); padding: 0 20px;
+        }
+
+        .bot-part { margin-top: auto; }
+        .brand { text-align: right; font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.7); text-transform: uppercase; margin-bottom: 15px; }
+
+        .footer {
+            height: 180px; background: #333;
+            border-radius: 25px; display: flex; justify-content: space-between; align-items: center; 
+            padding: 0 50px; color: #fff; box-shadow: none; border: none;
+        }
+
+        .fl-label { font-size: 20px; font-weight: 800; opacity: 0.8; letter-spacing: 2px; }
+        .fl-rank { font-size: 46px; font-weight: 900; text-transform: uppercase; }
+        .f-score { font-size: 110px; font-weight: 900; line-height: 1; letter-spacing: -5px; }
+
+        /* ЦВЕТА РАНГОВ (Сплошные) */
+        .r-0 { background: #262626; color: #888; }
+        .r-1 { background: #333333; color: #aaa; }
+        .r-2 { background: #3E2723; color: #E7B9B3; }
+        .r-3 { background: #B71C1C; color: #fff; }
+        .r-4 { background: #E65100; color: #fff; }
+        .r-5 { background: #FF9800; color: #000; }
+        .r-5 .fl-label { opacity: 0.6; color: #000; }
+        .r-6 { background: #CDDC39; color: #000; }
+        .r-6 .fl-label { opacity: 0.6; color: #000; }
+        .r-7 { background: #4CAF50; color: #000; }
+        .r-7 .fl-label { opacity: 0.6; color: #000; }
+        .r-8 { background: #2E7D32; color: #fff; }
+        .r-9 { background: #00E5FF; color: #000; }
+        .r-9 .fl-label { opacity: 0.6; color: #000; }
+        .r-10 { background: #2962FF; color: #fff; }
+
+        @media (max-width: 900px) {
+            .app-container { flex-direction: column; overflow: auto; }
+            .controls { width: 100%; border-right: none; border-bottom: 1px solid #333; height: auto; padding-bottom: 40px; }
+            .preview-wrapper { min-height: 400px; padding: 20px; }
+        }
+    </style>
 </head>
 <body>
 
 <div class="app-container">
     
     <div class="controls">
-        <h1>Создай свою карточку!</h1>
+        <h1>Создай свою ревью-карточку!</h1>
         
         <div class="input-block">
             <label>Название</label>
@@ -53,9 +243,7 @@
             
             <div id="target-card" class="card-hd">
                 
-                <div class="bg-layer">
-                    <img src="https://via.placeholder.com/1080x1080/1a1a1a/1a1a1a?text=" id="bg-img">
-                </div>
+                <div class="bg-layer" id="bg-div"></div>
                 
                 <div class="bg-overlay"></div>
 
@@ -103,182 +291,8 @@
     </div>
 </div>
 
-<script src="script.js"></script>
-</body>
-</html>
-<style>:root {
-    --bg: #000;
-    --panel: #141414;
-    --text: #fff;
-    --accent: #2962FF;
-    --border: #333;
-}
-* { box-sizing: border-box; }
-body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
-
-.app-container { display: flex; height: 100%; }
-
-.controls {
-    width: 340px; background: var(--panel); padding: 20px;
-    border-right: 1px solid var(--border); overflow-y: auto;
-    flex-shrink: 0; z-index: 10;
-}
-h1 { font-size: 18px; color: var(--text); margin: 0 0 20px 0; }
-.input-block { margin-bottom: 15px; }
-.input-block label { display: block; font-size: 12px; color: #888; margin-bottom: 5px; }
-input[type="text"], textarea { 
-    width: 100%; background: #000; border: 1px solid #444; color: #fff; 
-    padding: 8px; border-radius: 6px; resize: none; font-family: inherit; 
-}
-input[type="file"] { font-size: 12px; }
-.divider { 
-    font-size: 10px; text-transform: uppercase; color: #666; font-weight: bold; 
-    border-bottom: 1px solid #333; margin: 20px 0 10px 0; padding-bottom: 5px;
-}
-.slider-row { display: flex; align-items: center; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-.slider-row span { width: 70px; }
-.slider-row .val { width: 30px; text-align: right; color: var(--accent); }
-
-input[type="range"] { 
-    flex-grow: 1; margin: 0 10px; height: 6px; 
-    background: #333; border-radius: 3px; 
-    -webkit-appearance: none; cursor: pointer; box-shadow: none; 
-}
-input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 18px; height: 18px; 
-    background: #fff; border-radius: 50%; box-shadow: none;
-}
-.rainbow-slider {
-    background: linear-gradient(90deg, #FF0000 0%, #FF7F00 16%, #FFFF00 33%, #00FF00 50%, #00FFFF 66%, #0000FF 83%, #8B00FF 100%) !important;
-}
-.vibe-desc { text-align: right; font-size: 11px; color: #888; margin-top: -5px; }
-
-#btn-save {
-    width: 100%; background: var(--accent); color: #fff; border: none; padding: 15px;
-    border-radius: 8px; font-weight: bold; font-size: 16px; margin-top: 20px; cursor: pointer;
-}
-
-.preview-wrapper {
-    flex-grow: 1; background: #050505; 
-    display: flex; align-items: center; justify-content: center;
-    overflow: hidden; position: relative;
-    background-image: radial-gradient(#222 1px, transparent 1px);
-    background-size: 20px 20px;
-}
-#card-scale-root {
-    transform-origin: center center;
-    box-shadow: 0 0 50px rgba(0,0,0,0.5); 
-}
-
-/* КАРТОЧКА */
-.card-hd {
-    width: 1080px; height: 1080px; 
-    background: #000;
-    position: relative; overflow: hidden; display: flex; flex-direction: column;
-}
-
-/* ФОН - Мы не используем CSS-фильтры, они будут генерироваться JS */
-.bg-layer { position: absolute; inset: 0; z-index: 1; }
-.bg-layer img {
-    width: 100%; height: 100%; object-fit: cover;
-    transform: scale(1.05); /* Легкий зум, чтобы не было белых краев */
-}
-
-/* ОВЕРЛЕЙ ДЛЯ iOS (когда блюра нет) */
-body.is-ios .bg-overlay {
-    background: linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.95)); /* Сильнее затемняем */
-}
-/* ОВЕРЛЕЙ ДЛЯ ОСТАЛЬНЫХ (когда блюр есть) */
-.bg-overlay {
-    position: absolute; inset: 0; z-index: 2;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.85));
-}
-
-.card-inner { position: relative; z-index: 5; height: 100%; padding: 60px; display: flex; flex-direction: column; }
-
-.top-part { display: flex; gap: 40px; height: 500px; }
-.poster-box { 
-    width: 340px; height: 100%; border-radius: 20px; overflow: hidden; 
-    box-shadow: 0 20px 60px rgba(0,0,0,0.8); 
-    border: 2px solid rgba(255,255,255,0.1); flex-shrink: 0;
-    background: #111;
-}
-
-#card-poster-div {
-    width: 100%; height: 100%;
-    background-color: #222;
-    background-size: cover; 
-    background-position: center;
-    background-repeat: no-repeat;
-    background-image: url('https://via.placeholder.com/400x600/333/555?text=POSTER');
-}
-
-.info-box { flex-grow: 1; display: flex; flex-direction: column; }
-.title-wrap { height: 180px; overflow: hidden; margin-bottom: 20px; }
-.title-wrap h2 { 
-    margin: 0; font-size: 54px; line-height: 1.1; font-weight: 800; 
-    text-shadow: 0 4px 10px rgba(0,0,0,0.8);
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-}
-
-.stats-list { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
-.stat { display: flex; align-items: center; gap: 20px; }
-.l { width: 110px; font-size: 26px; font-weight: 700; color: #ccc; text-shadow: 1px 1px 2px #000;}
-.b { flex-grow: 1; height: 14px; background: rgba(0,0,0,0.6); border-radius: 7px; border: 1px solid rgba(255,255,255,0.15); }
-.b div { height: 100%; background: #fff; border-radius: 7px; box-shadow: none; }
-.v { width: 60px; text-align: right; font-size: 30px; font-weight: 800; text-shadow: 1px 1px 2px #000;}
-
-.vibe-block {
-    margin-top: auto; background: rgba(0,0,0,0.6); padding: 15px 25px; 
-    border-radius: 15px; border: 1px solid rgba(255,255,255,0.2);
-    display: flex; justify-content: space-between; align-items: center;
-}
-.vt { font-size: 22px; font-weight: 700; color: #ddd; }
-.vv { font-size: 30px; font-weight: 900; }
-
-.mid-part { flex-grow: 1; display: flex; align-items: center; justify-content: center; }
-.mid-part p { 
-    font-size: 26px; font-style: italic; text-align: center; color: #fff; 
-    margin: 0; line-height: 1.4; max-height: 160px;
-    overflow: hidden; text-shadow: 0 2px 10px rgba(0,0,0,1); padding: 0 20px;
-}
-
-.bot-part { margin-top: auto; }
-.brand { text-align: right; font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.7); text-transform: uppercase; margin-bottom: 15px; }
-
-.footer {
-    height: 180px; background: #333;
-    border-radius: 25px; display: flex; justify-content: space-between; align-items: center; 
-    padding: 0 50px; color: #fff; box-shadow: none; border: none;
-}
-
-.fl-label { font-size: 20px; font-weight: 800; opacity: 0.8; letter-spacing: 2px; }
-.fl-rank { font-size: 46px; font-weight: 900; text-transform: uppercase; }
-.f-score { font-size: 110px; font-weight: 900; line-height: 1; letter-spacing: -5px; }
-
-/* РАНГИ (Однотонные) */
-.r-0 { background: #262626; color: #888; }
-.r-1 { background: #333333; color: #aaa; }
-.r-2 { background: #3E2723; color: #E7B9B3; }
-.r-3 { background: #B71C1C; color: #fff; }
-.r-4 { background: #E65100; color: #fff; }
-.r-5 { background: #FF9800; color: #000; }
-.r-5 .fl-label { opacity: 0.6; color: #000; }
-.r-6 { background: #CDDC39; color: #000; }
-.r-6 .fl-label { opacity: 0.6; color: #000; }
-.r-7 { background: #4CAF50; color: #000; }
-.r-7 .fl-label { opacity: 0.6; color: #000; }
-.r-8 { background: #2E7D32; color: #fff; }
-.r-9 { background: #00E5FF; color: #000; }
-.r-9 .fl-label { opacity: 0.6; color: #000; }
-.r-10 { background: #2962FF; color: #fff; }
-
-@media (max-width: 900px) {
-    .app-container { flex-direction: column; overflow: auto; }
-    .controls { width: 100%; border-right: none; border-bottom: 1px solid #333; height: auto; padding-bottom: 40px; }
-    .preview-wrapper { min-height: 400px; padding: 20px; }
-}
-</style><script>document.addEventListener('DOMContentLoaded', () => {
+<script>
+document.addEventListener('DOMContentLoaded', () => {
     
     // === ДЕТЕКТОР iOS ===
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -304,8 +318,9 @@ body.is-ios .bg-overlay {
         outTitle: document.getElementById('out-title'),
         outComment: document.getElementById('out-comment'),
         
+        // ВНИМАНИЕ: DIV-ы вместо IMG
         cardPosterDiv: document.getElementById('card-poster-div'), 
-        bgImg: document.getElementById('bg-img'), 
+        bgDiv: document.getElementById('bg-div'), 
         
         barPlot: document.getElementById('bar-plot'), outPlot: document.getElementById('out-plot'),
         barChars: document.getElementById('bar-chars'), outChars: document.getElementById('out-chars'),
@@ -385,7 +400,7 @@ body.is-ios .bg-overlay {
         els.footer.className = `footer ${rObj.c}`;
     }
 
-    // --- ОБРАБОТКА ИЗОБРАЖЕНИЯ ---
+    // --- ЗАГРУЗКА ФОТО (ПРОСТО background-image) ---
     els.imgInp.addEventListener('change', (e) => {
         if(e.target.files[0]) {
             const file = e.target.files[0];
@@ -393,34 +408,10 @@ body.is-ios .bg-overlay {
 
             reader.onload = (event) => {
                 const rawSrc = event.target.result;
-                
-                // 1. Постер (Всегда четкий, в DIV-е для кропа)
+                // Ставим картинку как фон. 
+                // CSS (background-size: cover) сам обрежет лишнее и не будет сплющивать!
                 els.cardPosterDiv.style.backgroundImage = `url('${rawSrc}')`;
-
-                // 2. Фон (Разная логика для iOS и Android)
-                if (isIOS) {
-                    // НА iOS: Просто ставим картинку. Блюра нет, только затемнение в CSS.
-                    els.bgImg.src = rawSrc;
-                } else {
-                    // НА ANDROID/PC: Генерируем "запеченный" блюр через Canvas
-                    // чтобы он сохранился при экспорте.
-                    const img = new Image();
-                    img.src = rawSrc;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        
-                        // Делаем средний размер для блюра
-                        canvas.width = 360; 
-                        canvas.height = 540;
-                        
-                        // Применяем JS-блюр (работает лучше CSS при экспорте)
-                        ctx.filter = 'blur(15px)'; 
-                        ctx.drawImage(img, -20, -20, canvas.width + 40, canvas.height + 40);
-                        
-                        els.bgImg.src = canvas.toDataURL();
-                    }
-                }
+                els.bgDiv.style.backgroundImage = `url('${rawSrc}')`;
             }
             reader.readAsDataURL(file);
         }
@@ -451,33 +442,4 @@ body.is-ios .bg-overlay {
         document.body.appendChild(ghost);
 
         const clone = document.getElementById('target-card').cloneNode(true);
-        clone.style.transform = 'none'; 
-        clone.style.width = '1080px';
-        clone.style.height = '1080px';
-        
-        ghost.appendChild(clone);
-
-        setTimeout(() => {
-            html2canvas(clone, {
-                scale: 1, 
-                useCORS: true,
-                backgroundColor: "#000"
-            }).then(canvas => {
-                const link = document.createElement('a');
-                const name = (els.title.value || "review").replace(/[^a-zа-я0-9]/gi,'_');
-                link.download = `CN_${name}_Card.png`;
-                link.href = canvas.toDataURL("image/png");
-                link.click();
-
-                document.body.removeChild(ghost);
-                btn.innerText = oldText;
-            });
-        }, 200);
-    });
-
-    [els.title, els.comment, els.plot, els.chars, els.visual, els.sound, els.vibe]
-        .forEach(el => el.addEventListener('input', update));
-
-    update();
-});
-</script>
+        clone.styl
