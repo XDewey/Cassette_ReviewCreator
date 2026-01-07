@@ -1,9 +1,9 @@
-<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cassette Review Card</title>
+    <title>Cassette Review Hybrid Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;900&display=swap" rel="stylesheet">
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
@@ -61,7 +61,7 @@
             border-radius: 8px; font-weight: bold; font-size: 16px; margin-top: 20px; cursor: pointer;
         }
 
-        /* --- ПРЕВЬЮ ОБЛАСТЬ --- */
+        /* --- ПРЕВЬЮ --- */
         .preview-wrapper {
             flex-grow: 1; background: #050505; 
             display: flex; align-items: center; justify-content: center;
@@ -74,39 +74,37 @@
             box-shadow: 0 0 50px rgba(0,0,0,0.5); 
         }
 
-        /* --- САМА КАРТОЧКА --- */
+        /* --- КАРТОЧКА --- */
         .card-hd {
             width: 1080px; height: 1080px; 
             background: #000;
             position: relative; overflow: hidden; display: flex; flex-direction: column;
         }
 
-        /* 1. ФОНОВЫЙ СЛОЙ (DIV вместо IMG) */
+        /* ФОН (DIV) */
         .bg-layer { 
             position: absolute; inset: 0; z-index: 1;
             background-color: #111;
-            /* ВАЖНО: cover обрезает лишнее, а не сжимает */
+            /* Важно: cover сам обрежет картинку под квадрат */
             background-size: cover; 
             background-position: center;
             background-repeat: no-repeat;
-            
-            /* БЛЮР ПО УМОЛЧАНИЮ (Android/PC) */
-            filter: blur(40px);
-            transform: scale(1.1);
+            /* Мы НЕ используем здесь filter:blur, блюр будет запечен в саму картинку JS-ом */
+            transform: scale(1.05); 
         }
 
-        /* 2. ЕСЛИ iOS - ВЫКЛЮЧАЕМ БЛЮР (чтобы не было пикселей) */
+        /* На iOS отключаем увеличение и делаем фон темнее (т.к. он четкий) */
         body.is-ios .bg-layer {
-            filter: none !important;
             transform: none !important;
-            opacity: 0.3; /* Просто затемняем */
+            opacity: 0.35;
         }
 
+        /* Затемнение */
         .bg-overlay {
             position: absolute; inset: 0; z-index: 2;
             background: linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.85));
         }
-        /* На iOS оверлей чуть темнее, т.к. фон четкий */
+        /* На iOS оверлей чуть плотнее */
         body.is-ios .bg-overlay {
             background: linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0.95));
         }
@@ -121,7 +119,7 @@
             background: #111;
         }
 
-        /* ПОСТЕР (DIV вместо IMG) */
+        /* ПОСТЕР (DIV) */
         #card-poster-div {
             width: 100%; height: 100%;
             background-color: #222;
@@ -174,7 +172,7 @@
         .fl-rank { font-size: 46px; font-weight: 900; text-transform: uppercase; }
         .f-score { font-size: 110px; font-weight: 900; line-height: 1; letter-spacing: -5px; }
 
-        /* ЦВЕТА РАНГОВ (Сплошные) */
+        /* РАНГИ (Сплошные, без теней) */
         .r-0 { background: #262626; color: #888; }
         .r-1 { background: #333333; color: #aaa; }
         .r-2 { background: #3E2723; color: #E7B9B3; }
@@ -318,7 +316,6 @@ document.addEventListener('DOMContentLoaded', () => {
         outTitle: document.getElementById('out-title'),
         outComment: document.getElementById('out-comment'),
         
-        // ВНИМАНИЕ: DIV-ы вместо IMG
         cardPosterDiv: document.getElementById('card-poster-div'), 
         bgDiv: document.getElementById('bg-div'), 
         
@@ -400,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
         els.footer.className = `footer ${rObj.c}`;
     }
 
-    // --- ЗАГРУЗКА ФОТО (ПРОСТО background-image) ---
+    // --- ЛОГИКА ЗАГРУЗКИ (ГИБРИДНАЯ) ---
     els.imgInp.addEventListener('change', (e) => {
         if(e.target.files[0]) {
             const file = e.target.files[0];
@@ -408,10 +405,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
             reader.onload = (event) => {
                 const rawSrc = event.target.result;
-                // Ставим картинку как фон. 
-                // CSS (background-size: cover) сам обрежет лишнее и не будет сплющивать!
+                
+                // 1. Постер (всегда через div для crop)
                 els.cardPosterDiv.style.backgroundImage = `url('${rawSrc}')`;
-                els.bgDiv.style.backgroundImage = `url('${rawSrc}')`;
+
+                // 2. Фон (Разделение логики)
+                if (isIOS) {
+                    // iOS: Просто ставим картинку (блюр выключен в CSS)
+                    els.bgDiv.style.backgroundImage = `url('${rawSrc}')`;
+                } else {
+                    // ANDROID/PC: Генерируем "запеченный" блюр через Canvas
+                    const img = new Image();
+                    img.src = rawSrc;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Делаем средний размер для блюра (700px - хороший баланс)
+                        canvas.width = 720; 
+                        canvas.height = 720;
+                        
+                        // Применяем НАТИВНЫЙ БЛЮР на канвасе
+                        // (html2canvas сохранит это как картинку)
+                        ctx.filter = 'blur(40px)'; 
+                        
+                        // Рисуем картинку (object-fit: cover logic для канваса)
+                        // Растягиваем чтобы заполнить квадрат
+                        const sRatio = img.width / img.height;
+                        const dRatio = canvas.width / canvas.height;
+                        let sWidth = img.width;
+                        let sHeight = img.height;
+                        let sx = 0; let sy = 0;
+
+                        if (sRatio > dRatio) {
+                            sWidth = img.height * dRatio;
+                            sx = (img.width - sWidth) / 2;
+                        } else {
+                            sHeight = img.width / dRatio;
+                            sy = (img.height - sHeight) / 2;
+                        }
+                        
+                        // Рисуем с небольшим запасом по краям (-20), чтобы скрыть границы блюра
+                        ctx.drawImage(img, sx, sy, sWidth, sHeight, -40, -40, canvas.width + 80, canvas.height + 80);
+                        
+                        els.bgDiv.style.backgroundImage = `url('${canvas.toDataURL()}')`;
+                    }
+                }
             }
             reader.readAsDataURL(file);
         }
